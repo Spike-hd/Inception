@@ -6,7 +6,7 @@ RUN		apt update -y && \
 		apt install -y \
 			wget \
 			curl \
-			php7.3 \
+			php \
 			php-fpm \
 			php-mysql \
 			mariadb-client \
