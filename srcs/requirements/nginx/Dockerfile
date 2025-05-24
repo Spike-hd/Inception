@@ -9,7 +9,7 @@ RUN		apt update -y && \
 		-keyout /etc/nginx/ssl/inception.key \
 		-out /etc/nginx/ssl/inception.crt \
 		-subj "/C=FR/ST=Occitanie/L=Perpignan/O=42/OU=42/CN=hduflos.42.fr" && \
-		mkdir -p /var/run/nginx \
+		mkdir -p /var/run/nginx && \
 		chmod -R 755 /var/www/html
 
 COPY	conf/nginx.conf /etc/nginx/nginx.conf
