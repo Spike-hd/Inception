@@ -39,4 +39,4 @@ fi
 
 # Démarrer PHP-FPM en avant-plan
 echo "🚀 Lancement de PHP-FPM..."
-exec php-fpm7.3 -F
+exec php-fpm -F
