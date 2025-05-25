@@ -1,23 +1,36 @@
 #!/bin/bash
 
-# Démarrer MySQL
-service mysql start
+# Initialisation de la base de données si nécessaire
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+    echo "Initialisation de la base de données..."
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql
+fi
 
-# Créer la base de données si elle n'existe pas
-mysql -e "CREATE DATABASE IF NOT EXISTS ${SQL_DATABASE};"
+# Démarrer MySQL en arrière-plan pour la configuration initiale
+mysqld_safe --user=mysql --datadir=/var/lib/mysql &
+MYSQL_PID=$!
 
-# Créer un utilisateur et lui donner les droits
-mysql -e "CREATE USER IF NOT EXISTS ${SQL_USER}@'%' IDENTIFIED BY '${SQL_PASSWORD}';"
-mysql -e "GRANT ALL PRIVILEGES ON ${SQL_DATABASE}.* TO ${SQL_USER}@'%' IDENTIFIED BY '${SQL_PASSWORD}';"
+# Attendre que MySQL soit prêt
+echo "Attente du démarrage de MySQL..."
+while ! mysqladmin ping --silent; do
+    sleep 1
+done
 
-# Modifier le mot de passe de l'utilisateur root
+echo "MySQL démarré, configuration en cours..."
+
+# Configuration de la base de données
+mysql -e "CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;"
+mysql -e "CREATE USER IF NOT EXISTS '${SQL_USER}'@'%' IDENTIFIED BY '${SQL_PASSWORD}';"
+mysql -e "GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'%';"
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}';"
-
-# Rafraîchir les privilèges
 mysql -e "FLUSH PRIVILEGES;"
 
-# Stop la base de donnée
-mysqladmin -u root -p${SQL_ROOT_PASSWORD} shutdown
+echo "Configuration terminée."
 
-#lance son execution
-exec mysqld_safe
+# Arrêter le processus temporaire
+mysqladmin -u root -p"${SQL_ROOT_PASSWORD}" shutdown
+wait $MYSQL_PID
+
+# Démarrer MySQL en mode production (premier plan)
+echo "Démarrage de MySQL en mode production..."
+exec mysqld --user=mysql --datadir=/var/lib/mysql
