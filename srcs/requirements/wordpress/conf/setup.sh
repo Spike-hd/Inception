@@ -3,7 +3,7 @@
 cd /var/www/wordpress
 
 # Attendre que MariaDB soit prêt
-until mysqladmin ping -h"$SQL_HOST" --silent; do
+until nc -z mariadb 3306; do
 	echo "En attente de MariaDB..."
 	sleep 2
 done
@@ -24,7 +24,7 @@ wp config create \
 # Installer WordPress
 wp core install \
   --url=$DOMAIN_NAME \
-  --title="Mon super site" \
+  --title="test website" \
   --admin_user=$WP_ADMIN_USER \
   --admin_password=$WP_ADMIN_PASSWORD \
   --admin_email=$WP_ADMIN_EMAIL \
