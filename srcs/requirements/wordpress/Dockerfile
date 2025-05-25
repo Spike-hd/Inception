@@ -11,7 +11,8 @@ RUN		apt update -y && \
 			php-mysql \
 			mariadb-client \
 			unzip \
-			less
+			less \
+			netcat && rm -rf /var/lib/apt/lists/*
 
 # Téléchargement et installation de WordPress
 RUN		wget https://fr.wordpress.org/wordpress-6.8.1-fr_FR.tar.gz -P /var/www && \
