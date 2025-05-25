@@ -28,7 +28,7 @@ mysql -e "FLUSH PRIVILEGES;"
 echo "Configuration terminée."
 
 # Arrêter le processus temporaire
-mysqladmin -u root -p"${SQL_ROOT_PASSWORD}" shutdown
+mysqladmin -uroot shutdown
 wait $MYSQL_PID
 
 # Démarrer MySQL en mode production (premier plan)
