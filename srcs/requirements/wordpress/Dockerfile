@@ -18,7 +18,7 @@ RUN apt update -y && \
 RUN mkdir -p /run/php
 
 # Configuration PHP-FPM
-COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www.conf
+COPY conf/www.conf /etc/php/7.4/fpm/pool.d/www.conf
 
 # Installation de WordPress
 RUN wget https://fr.wordpress.org/wordpress-6.8.1-fr_FR.tar.gz -P /var/www && \
