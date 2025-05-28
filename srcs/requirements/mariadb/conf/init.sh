@@ -26,7 +26,8 @@ echo "✅ MariaDB en cours d'exécution"
 # Always attempt to configure users and database
 echo "⚙️ Configuration des utilisateurs et de la base..."
 
-mysql -uroot <<-EOSQL || mysql -uroot -p"${SQL_ROOT_PASSWORD}" <<-EOSQL
+# Important: The EOSQL must be at the start of the line with no spaces before it
+mysql -uroot <<EOSQL
     -- Set root password
     ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}'
         PASSWORD EXPIRE NEVER
