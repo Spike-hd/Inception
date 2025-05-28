@@ -1,40 +1,61 @@
 #!/bin/bash
 
+# Check required environment variables
 if [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ] || [ -z "$SQL_PASSWORD" ] || [ -z "$SQL_ROOT_PASSWORD" ]; then
-    echo "ERREUR: Variables d'environnement manquantes"
+    echo "❌ ERREUR: Variables d'environnement manquantes"
     exit 1
 fi
 
+# Initialize DB if needed
 if [ ! -d "/var/lib/mysql/mysql" ]; then
     echo "🔄 Initialisation de la base de données..."
     mysql_install_db --user=mysql --datadir=/var/lib/mysql --skip-test-db
-
-    # Initialisation avec bootstrap
-    mysqld --bootstrap --user=mysql --datadir=/var/lib/mysql << EOF
-USE mysql;
-FLUSH PRIVILEGES;
-
-CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;
-
-# Création des utilisateurs
-CREATE USER '${SQL_USER}'@'%' IDENTIFIED BY '${SQL_PASSWORD}';
-CREATE USER '${SQL_USER}'@'localhost' IDENTIFIED BY '${SQL_PASSWORD}';
-
-# Attribution des privilèges
-GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'%';
-GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'localhost';
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}';
-
-# Nettoyage
-DELETE FROM mysql.user WHERE User='';
-DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-DROP DATABASE IF EXISTS test;
-FLUSH PRIVILEGES;
-EOF
-
-    echo "✅ Base de données initialisée"
 fi
 
-echo "🚀 Démarrage de MariaDB..."
+# Always start MariaDB in safe mode for setup
+echo "🚀 Lancement temporaire de MariaDB pour configuration..."
+mysqld_safe --datadir=/var/lib/mysql --skip-networking &
+pid="$!"
+
+until mysqladmin ping --silent; do
+    sleep 1
+done
+
+echo "✅ MariaDB en cours d'exécution"
+
+# Always attempt to configure users and database
+echo "⚙️ Configuration des utilisateurs et de la base..."
+
+mysql -uroot <<-EOSQL || mysql -uroot -p"${SQL_ROOT_PASSWORD}" <<-EOSQL
+    -- Set root password
+    ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}'
+        PASSWORD EXPIRE NEVER
+        ACCOUNT UNLOCK;
+
+    CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;
+
+    -- Recreate users to ensure correct password
+    DROP USER IF EXISTS '${SQL_USER}'@'%';
+    DROP USER IF EXISTS '${SQL_USER}'@'localhost';
+
+    CREATE USER '${SQL_USER}'@'%' IDENTIFIED BY '${SQL_PASSWORD}';
+    CREATE USER '${SQL_USER}'@'localhost' IDENTIFIED BY '${SQL_PASSWORD}';
+
+    GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'%';
+    GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'localhost';
+
+    DELETE FROM mysql.user WHERE User='';
+    DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+    FLUSH PRIVILEGES;
+EOSQL
+
+# Shut down temp MariaDB
+echo "🛑 Arrêt temporaire de MariaDB..."
+mysqladmin -uroot -p"${SQL_ROOT_PASSWORD}" shutdown
+
+# Start MariaDB normally
+echo "🚀 Démarrage final de MariaDB..."
 exec mysqld --user=mysql --console
+
 
