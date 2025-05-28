@@ -51,12 +51,21 @@ mysql -uroot <<EOSQL
     FLUSH PRIVILEGES;
 EOSQL
 
-# Shut down temp MariaDB
-echo "🛑 Arrêt temporaire de MariaDB..."
-mysqladmin -uroot -p"${SQL_ROOT_PASSWORD}" shutdown
+# Create temporary config file for mysqladmin
+cat > /tmp/mysqladmin.cnf << EOF
+[client]
+user=root
+password=${SQL_ROOT_PASSWORD}
+EOF
 
+chmod 600 /tmp/mysqladmin.cnf
+
+# Shut down temp MariaDB safely
+echo "🛑 Arrêt temporaire de MariaDB..."
+mysqladmin --defaults-file=/tmp/mysqladmin.cnf shutdown
+
+# Clean up
+rm /tmp/mysqladmin.cnf
 # Start MariaDB normally
 echo "🚀 Démarrage final de MariaDB..."
-exec mysqld --user=mysql --console
-
-
+CMD ["mysqld"]

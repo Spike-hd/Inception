@@ -17,28 +17,33 @@ echo "✅ Database connection successful!"
 
 # Si wp-config.php n'existe pas, on crée la config et on installe WordPress
 if [ ! -f wp-config.php ]; then
-    echo "📝 Création de wp-config.php..."
+	echo "📝 Création de wp-config.php..."
 
-    wp config create \
-        --dbname="$SQL_DATABASE" \
-        --dbuser="$SQL_USER" \
-        --dbpass="$SQL_PASSWORD" \
-        --dbhost=mariadb \
-        --path=/var/www/wordpress \
-        --allow-root
+	wp config create \
+		--dbname="$SQL_DATABASE" \
+		--dbuser="$SQL_USER" \
+		--dbpass="$SQL_PASSWORD" \
+		--dbhost=mariadb \
+		--path=/var/www/wordpress \
+		--allow-root
 
-    wp core install \
-        --url="$DOMAIN_NAME" \
-        --title="Inception" \
-        --admin_user="$WP_ADMIN_USER" \
-        --admin_password="$WP_ADMIN_PASSWORD" \
-        --admin_email="$WP_ADMIN_EMAIL" \
-        --skip-email \
-        --allow-root
+	wp core install \
+		--url="$DOMAIN_NAME" \
+		--title="Inception" \
+		--admin_user="$WP_ADMIN_USER" \
+		--admin_password="$WP_ADMIN_PASSWORD" \
+		--admin_email="$WP_ADMIN_EMAIL" \
+		--skip-email \
+		--allow-root
 
-    echo "✅ WordPress installé avec succès."
+	wp user create "$WP_USER" "$WP_USER_EMAIL" \
+		--role=author \
+		--user_pass="$WP_USER_PASSWORD" \
+		--allow-root
+
+	echo "✅ WordPress installé avec succès."
 else
-    echo "ℹ️ WordPress est déjà configuré."
+	echo "ℹ️ WordPress est déjà configuré."
 fi
 
 echo "🚀 Lancement de PHP-FPM..."
