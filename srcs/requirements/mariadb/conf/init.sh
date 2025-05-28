@@ -68,4 +68,4 @@ mysqladmin --defaults-file=/tmp/mysqladmin.cnf shutdown
 rm /tmp/mysqladmin.cnf
 # Start MariaDB normally
 echo "🚀 Démarrage final de MariaDB..."
-CMD ["mysqld"]
+exec mysqld --user=mysql --console
