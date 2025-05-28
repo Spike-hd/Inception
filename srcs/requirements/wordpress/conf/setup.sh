@@ -2,9 +2,14 @@
 
 cd /var/www/wordpress
 
+echo "Testing database connection..."
+echo "User: $SQL_USER"
+echo "Database: $SQL_DATABASE"
+echo "Host: $SQL_HOST"
+
 # Attendre que MariaDB soit prêt et tester la connexion
-until mariadb -h mariadb -u"$SQL_USER" -p"$SQL_PASSWORD" -e "SELECT 1;" >/dev/null 2>&1; do
-    echo "🔄 En attente de MariaDB..."
+until mariadb -h mariadb -u"$SQL_USER" -p"$SQL_PASSWORD" "$SQL_DATABASE" -e "SELECT 1;" >/dev/null 2>&1; do
+    echo "🔄 En attente de MariaDB... (Tentative de connexion avec $SQL_USER sur $SQL_DATABASE)"
     sleep 5
 done
 
