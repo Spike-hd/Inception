@@ -1,4 +1,4 @@
-FROM debian:bookworm
+FROM	debian:bullseye
 
 # Installation de MariaDB
 RUN apt update -y && \
