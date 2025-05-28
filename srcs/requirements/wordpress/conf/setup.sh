@@ -7,11 +7,13 @@ echo "User: $SQL_USER"
 echo "Database: $SQL_DATABASE"
 echo "Host: $SQL_HOST"
 
-# Attendre que MariaDB soit prêt et tester la connexion
-until mariadb -h mariadb -u"$SQL_USER" -p"$SQL_PASSWORD" "$SQL_DATABASE" -e "SELECT 1;" >/dev/null 2>&1; do
-    echo "🔄 En attente de MariaDB... (Tentative de connexion avec $SQL_USER sur $SQL_DATABASE)"
+# Test connection with proper credentials
+until mysqladmin -h"$SQL_HOST" -u"$SQL_USER" -p"$SQL_PASSWORD" ping &>/dev/null; do
+    echo "🔄 Waiting for MariaDB... (Trying to connect as $SQL_USER)"
     sleep 5
 done
+
+echo "✅ Database connection successful!"
 
 # Si wp-config.php n'existe pas, on crée la config et on installe WordPress
 if [ ! -f wp-config.php ]; then
