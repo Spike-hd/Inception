@@ -1,66 +1,118 @@
+# Version de la syntaxe docker-compose qu'on utilise
 version: '3.8'
 
+# ==============================================================
+# SERVICES = la liste de tous les conteneurs qu'on veut lancer
+# ==============================================================
 services:
-  mariadb:
-    container_name: mariadb              # Le nom du container
-    build:
-      context: requirements/mariadb     # Chemin vers le Dockerfile
-      dockerfile: Dockerfile            # Nom du Dockerfile (optionnel si c'est "Dockerfile")
-    env_file: .env                       # Fichier contenant les variables d'environnement
-    volumes:                             # Volume persistant pour MariaDB
-      - mariadb:/var/lib/mysql
-    restart: unless-stopped             # Redémarrage automatique sauf si explicitement arrêté
-    expose:
-      - "3306"                           # Expose le port à d'autres services dans le réseau Docker
-    networks:
-      - inception                        # Réseau Docker dédié
 
-  nginx:
-    container_name: nginx
-    build:
-      context: requirements/nginx
-      dockerfile: Dockerfile
-    env_file: .env
+  # ─────────────── MARIADB ───────────────
+  mariadb:
+
+    # Où trouver le Dockerfile pour construire l'image
+    build: ./requirements/mariadb
+
+    # Nom du conteneur (sinon Docker lui donne un nom aléatoire)
+    container_name: mariadb
+
+    # Si le conteneur plante, Docker le redémarre automatiquement
+    # "unless-stopped" = redémarre toujours SAUF si on l'arrête manuellement
+    restart: unless-stopped
+
+    # Variables d'environnement passées AU conteneur
+    # Ce sont les ${MYSQL_DATABASE}, ${MYSQL_USER}, etc. utilisées dans init.sh
+    # On les lit depuis le fichier .env (on va le créer juste après)
+    env_file:
+      - .env
+
+    # VOLUMES = dossiers partagés entre ton Mac et le conteneur
+    # Sans ça, quand le conteneur redémarre, toutes les données sont perdues !
+    # Format : "dossier_sur_mac:dossier_dans_le_conteneur"
     volumes:
-      - wordpress:/var/www/wordpress
-    restart: on-failure   # Ici nous changeons, le container redémarrera uniquement en cas de crash.
-    ports:
-      - "443:443"        # on indique le port qui sera exposé a la machine locale
+      - mariadb_data:/var/lib/mysql
+
+    # Le réseau privé Docker sur lequel ce conteneur communique
     networks:
       - inception
-    depends_on:           # Nouvelle ligne, indiquant de ne pas démarrer NGINX tant que WordPress n'a pas démarré.
+
+    # Pas de "ports:" ici ! MariaDB n'a pas besoin d'être accessible
+    # depuis ton Mac, seulement depuis WordPress (même réseau Docker)
+
+  # ─────────────── WORDPRESS ───────────────
+  wordpress:
+
+    # Où trouver le Dockerfile
+    build: ./requirements/wordpress
+
+    container_name: wordpress
+
+    restart: unless-stopped
+
+    # WordPress a besoin que MariaDB soit lancée AVANT lui
+    depends_on:
+      - mariadb
+
+    # Mêmes variables d'environnement (connexion à MariaDB + config WordPress)
+    env_file:
+      - .env
+
+    # Les fichiers WordPress sont stockés ici (thèmes, plugins, uploads...)
+    volumes:
+      - wordpress_data:/var/www/html
+
+    networks:
+      - inception
+
+    # Pas de "ports:" non plus ! C'est NGINX qui recevra le trafic
+    # et le transmettra à WordPress via le port 9000 (PHP-FPM)
+
+  # ─────────────── NGINX ───────────────
+  nginx:
+
+    build: ./requirements/nginx
+
+    container_name: nginx
+
+    restart: unless-stopped
+
+    # NGINX a besoin que WordPress soit lancé AVANT lui
+    depends_on:
       - wordpress
 
-  wordpress:
-    container_name: wordpress
-    build:
-      context: requirements/wordpress
-      dockerfile: Dockerfile
-    env_file: .env
+    # SEUL conteneur avec "ports:" !
+    # C'est la porte d'entrée depuis l'extérieur de Docker
+    # 443:443 = port 443 de ton Mac → port 443 du conteneur
+    ports:
+      - "443:443"
+
+    # NGINX a besoin d'accéder aux fichiers WordPress (pour les fichiers statiques : images, CSS, JS)
     volumes:
-      - wordpress:/var/www/wordpress       # Partage du volume avec nginx
-    restart: on-failure
+      - wordpress_data:/var/www/html
+
     networks:
       - inception
-    depends_on:                            # WordPress attend que MariaDB soit démarré
-      - mariadb
-    expose:
-     - "9000"                            # Expose le port 9000 pour PHP-FPM (interne au réseau Docker)
 
+# ==============================================================
+# VOLUMES = les disques durs persistants
+# ==============================================================
+volumes:
+  mariadb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /Users/${USER}/42/Inception_v2/data/mariadb
+
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /Users/${USER}/42/Inception_v2/data/wordpress
+
+# ==============================================================
+# NETWORKS = les réseaux privés Docker
+# ==============================================================
 networks:
   inception:
     driver: bridge
-
-volumes:
-  wordpress:
-    driver: local                       # ici nous stockons le volume en local
-    driver_opts:
-      type: 'none'                      # aucun type spécifique
-      o: 'bind'
-      device: '/home/${USER}/data/wordpress' #Ou stocker le dossier sur votre ordinateur en local
-  mariadb:
-    driver: local
-    driver_opts:
-      type: 'none'
-      o: 'bind'    # Les Bind Mounts sont des volumes qui se montent sur un chemin d'accès à l'hôte, et ils peuvent être modifiés par d'autres processus en dehors de docker.
-      device: '/home/${USER}/data/mariadb'  #Ou stocker le dossier sur votre ordinateur en local

@@ -1,41 +1,52 @@
-FROM	debian:bullseye
+# 1. Même base Alpine que MariaDB
+FROM alpine:3.18
 
-RUN apt update -y && \
-	apt upgrade -y && \
-	apt install -y \
-	wget \
-	curl \
-	php7.4 \
-	php7.4-fpm \
-	php7.4-mysql \
-	mariadb-client \
-	unzip \
-	less \
-	netcat && \
-	rm -rf /var/lib/apt/lists/*
+# 2. On installe :
+#    - php81 : le langage PHP (WordPress est écrit en PHP)
+#    - php81-fpm : FastCGI Process Manager (le "moteur" qui exécute PHP)
+#    - php81-mysqli : extension pour se connecter à MariaDB
+#    - php81-json, php81-curl, etc. : extensions requises par WordPress
+#    - wget : pour télécharger WordPress
+#    - netcat-openbsd : pour tester si MariaDB est prête (commande nc)
+RUN apk update && apk add --no-cache \
+    php81 \
+    php81-fpm \
+    php81-mysqli \
+    php81-json \
+    php81-curl \
+    php81-dom \
+    php81-exif \
+    php81-fileinfo \
+    php81-mbstring \
+    php81-openssl \
+    php81-xml \
+    php81-zip \
+    php81-redis \
+    php81-phar \
+    wget \
+    netcat-openbsd
 
-# Création du répertoire pour PHP-FPM
-RUN mkdir -p /run/php
+# 3. On télécharge WP-CLI (un outil en ligne de commande pour installer WordPress)
+#    C'est plus propre que de le faire manuellement
+RUN wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O /usr/local/bin/wp && \
+    chmod +x /usr/local/bin/wp
 
-# Configuration PHP-FPM
-COPY conf/www.conf /etc/php/7.4/fpm/pool.d/www.conf
+# 4. On copie la config PHP-FPM (sur quel port écouter, combien de processus...)
+COPY conf/www.conf /etc/php81/php-fpm.d/www.conf
 
-# Installation de WordPress
-RUN wget https://fr.wordpress.org/wordpress-6.8.1-fr_FR.tar.gz -P /var/www && \
-	tar -xzf /var/www/wordpress-6.8.1-fr_FR.tar.gz -C /var/www && \
-	rm /var/www/wordpress-6.8.1-fr_FR.tar.gz && \
-	chown -R www-data:www-data /var/www/wordpress
-
-# Installation de WP-CLI
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && \
-    chmod +x wp-cli.phar && \
-    mv wp-cli.phar /usr/local/bin/wp
-
-# Script d'installation WordPress
+# 5. On copie le script d'initialisation de WordPress
 COPY conf/setup.sh /usr/local/bin/setup.sh
 RUN chmod +x /usr/local/bin/setup.sh
 
-WORKDIR /var/www/wordpress
+# 6. On crée le dossier où WordPress sera installé
+RUN mkdir -p /var/www/html
 
+# 6b. On augmente la limite mémoire de PHP (par défaut 128M, pas assez pour WP-CLI)
+RUN echo "memory_limit = 512M" > /etc/php81/conf.d/memory.ini
+
+# 7. PHP-FPM écoute sur le port 9000 (NGINX lui enverra les requêtes PHP)
+EXPOSE 9000
+
+# 8. Au démarrage, on lance le script d'installation
 CMD ["/usr/local/bin/setup.sh"]
 

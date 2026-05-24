@@ -1,71 +1,58 @@
-#!/bin/bash
+#!/bin/sh
 
-# Check required environment variables
-if [ -z "$SQL_DATABASE" ] || [ -z "$SQL_USER" ] || [ -z "$SQL_PASSWORD" ] || [ -z "$SQL_ROOT_PASSWORD" ]; then
-    echo "❌ ERREUR: Variables d'environnement manquantes"
-    exit 1
-fi
+# =============================================================
+# Script d'initialisation de MariaDB
+# Ce script s'exécute à chaque démarrage du conteneur.
+# Il vérifie si la base de données existe déjà ou non.
+# NOTE : On utilise #!/bin/sh car Alpine n'a pas bash (trop lourd)
+# =============================================================
 
-# Initialize DB if needed
+# Crée le répertoire pour le socket MySQL (nécessaire pour que MariaDB démarre)
+mkdir -p /run/mysqld
+chown mysql:mysql /run/mysqld
+
+# Vérifie si la base de données a déjà été initialisée
+# (le dossier "mysql" dans /var/lib/mysql est créé lors de la première initialisation)
 if [ ! -d "/var/lib/mysql/mysql" ]; then
-    echo "🔄 Initialisation de la base de données..."
-    mysql_install_db --user=mysql --datadir=/var/lib/mysql --skip-test-db
-fi
 
-# Always start MariaDB in safe mode for setup
-echo "🚀 Lancement temporaire de MariaDB pour configuration..."
-mysqld_safe --datadir=/var/lib/mysql --skip-networking &
-pid="$!"
+    echo "🔧 Première initialisation de MariaDB..."
 
-until mysqladmin ping --silent; do
-    sleep 1
-done
+    # Initialise les tables système de MariaDB
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql > /dev/null
 
-echo "✅ MariaDB en cours d'exécution"
+    # Démarre MariaDB temporairement pour exécuter nos commandes SQL
+    mysqld --user=mysql --bootstrap << EOF
 
-# Always attempt to configure users and database
-echo "⚙️ Configuration des utilisateurs et de la base..."
+-- Utilise la base de données système
+USE mysql;
+FLUSH PRIVILEGES;
 
-# Important: The EOSQL must be at the start of the line with no spaces before it
-mysql -uroot <<EOSQL
-    -- Set root password
-    ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}'
-        PASSWORD EXPIRE NEVER
-        ACCOUNT UNLOCK;
+-- Supprime les utilisateurs anonymes (sécurité)
+DELETE FROM user WHERE User='';
 
-    CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;
+-- Crée la base de données pour WordPress
+CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE};
 
-    -- Recreate users to ensure correct password
-    DROP USER IF EXISTS '${SQL_USER}'@'%';
-    DROP USER IF EXISTS '${SQL_USER}'@'localhost';
+-- Crée l'utilisateur WordPress avec son mot de passe
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
 
-    CREATE USER '${SQL_USER}'@'%' IDENTIFIED BY '${SQL_PASSWORD}';
-    CREATE USER '${SQL_USER}'@'localhost' IDENTIFIED BY '${SQL_PASSWORD}';
+-- Donne tous les droits à cet utilisateur sur la base WordPress
+GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'%';
 
-    GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'%';
-    GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO '${SQL_USER}'@'localhost';
+-- Change le mot de passe root
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 
-    DELETE FROM mysql.user WHERE User='';
-    DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-
-    FLUSH PRIVILEGES;
-EOSQL
-
-# Create temporary config file for mysqladmin
-cat > /tmp/mysqladmin.cnf << EOF
-[client]
-user=root
-password=${SQL_ROOT_PASSWORD}
+-- Applique les changements
+FLUSH PRIVILEGES;
 EOF
 
-chmod 600 /tmp/mysqladmin.cnf
+    echo "✅ Base de données initialisée avec succès"
+else
+    echo "📁 Base de données déjà initialisée"
+fi
 
-# Shut down temp MariaDB safely
-echo "🛑 Arrêt temporaire de MariaDB..."
-mysqladmin --defaults-file=/tmp/mysqladmin.cnf shutdown
-
-# Clean up
-rm /tmp/mysqladmin.cnf
-# Start MariaDB normally
-echo "🚀 Démarrage final de MariaDB..."
-exec mysqld --user=mysql --console
+# Lance MariaDB au premier plan (pas en daemon)
+# --user=mysql : lance en tant qu'utilisateur mysql (sécurité)
+# exec : remplace le shell par MariaDB (Docker surveille ce processus)
+echo "🚀 Démarrage de MariaDB..."
+exec mariadbd --user=mysql

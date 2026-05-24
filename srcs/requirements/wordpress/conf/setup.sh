@@ -1,50 +1,61 @@
-#!/bin/bash
+#!/bin/sh
+set -e
 
-cd /var/www/wordpress
+# =============================================================
+# Script d'initialisation de WordPress
+# Ce script :
+# 1. Télécharge WordPress si pas déjà fait
+# 2. Configure la connexion à MariaDB
+# 3. Installe WordPress (crée l'admin)
+# 4. Lance PHP-FPM
+# set -e = arrête le script dès qu'une commande échoue
+# =============================================================
 
-echo "Testing database connection..."
-echo "User: $SQL_USER"
-echo "Database: $SQL_DATABASE"
-echo "Host: $SQL_HOST"
-
-# Test connection with proper credentials
-until mysqladmin -h"$SQL_HOST" -u"$SQL_USER" -p"$SQL_PASSWORD" ping &>/dev/null; do
-    echo "🔄 Waiting for MariaDB... (Trying to connect as $SQL_USER)"
-    sleep 5
+# Attend que MariaDB soit prête (elle met quelques secondes à démarrer)
+echo "Attente de MariaDB..."
+while ! nc -z mariadb 3306 2>/dev/null; do
+    sleep 1
 done
+echo "MariaDB est prête !"
 
-echo "✅ Database connection successful!"
+# Va dans le dossier web
+cd /var/www/html
 
-# Si wp-config.php n'existe pas, on crée la config et on installe WordPress
-if [ ! -f wp-config.php ]; then
-	echo "📝 Création de wp-config.php..."
+# Vérifie si WordPress est déjà installé
+if [ ! -f "wp-config.php" ]; then
 
-	wp config create \
-		--dbname="$SQL_DATABASE" \
-		--dbuser="$SQL_USER" \
-		--dbpass="$SQL_PASSWORD" \
-		--dbhost=mariadb \
-		--path=/var/www/wordpress \
-		--allow-root
+    echo "🔧 Installation de WordPress..."
 
-	wp core install \
-		--url="$DOMAIN_NAME" \
-		--title="Inception" \
-		--admin_user="$WP_ADMIN_USER" \
-		--admin_password="$WP_ADMIN_PASSWORD" \
-		--admin_email="$WP_ADMIN_EMAIL" \
-		--skip-email \
-		--allow-root
+    # Télécharge les fichiers WordPress
+    wp core download --allow-root
 
-	wp user create "$WP_USER" "$WP_USER_EMAIL" \
-		--role=author \
-		--user_pass="$WP_USER_PASSWORD" \
-		--allow-root
+    # Crée le fichier wp-config.php avec les infos de connexion à MariaDB
+    # Ces variables viennent du fichier .env via docker-compose
+    wp config create --allow-root \
+        --dbname="${MYSQL_DATABASE}" \
+        --dbuser="${MYSQL_USER}" \
+        --dbpass="${MYSQL_PASSWORD}" \
+        --dbhost="mariadb"
 
-	echo "✅ WordPress installé avec succès."
+    # Installe WordPress (crée les tables dans MariaDB + le compte admin)
+    wp core install --allow-root \
+        --url="${WP_URL}" \
+        --title="${WP_TITLE}" \
+        --admin_user="${WP_ADMIN_USER}" \
+        --admin_password="${WP_ADMIN_PASSWORD}" \
+        --admin_email="${WP_ADMIN_EMAIL}"
+
+    # Crée un deuxième utilisateur (demandé par le sujet)
+    wp user create --allow-root \
+        "${WP_USER}" "${WP_USER_EMAIL}" \
+        --role=author \
+        --user_pass="${WP_USER_PASSWORD}"
+
+    echo "WordPress installé avec succès !"
 else
-	echo "ℹ️ WordPress est déjà configuré."
+    echo "WordPress déjà installé"
 fi
 
-echo "🚀 Lancement de PHP-FPM..."
-exec /usr/sbin/php-fpm7.4 -F
+# Lance PHP-FPM au premier plan (comme mariadbd pour MariaDB)
+echo "🚀 Démarrage de PHP-FPM..."
+exec php-fpm81 -F

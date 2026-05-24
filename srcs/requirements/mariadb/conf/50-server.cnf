@@ -1,11 +1,16 @@
+# Configuration de MariaDB pour le conteneur Docker
 [mysqld]
-port = 3306
-bind_address = 0.0.0.0
+
+# Répertoire où MariaDB stocke ses données
 datadir = /var/lib/mysql
-user = mysql
-socket = /run/mysqld/mysqld.sock
 
+# Fichier socket pour les connexions locales
+socket  = /run/mysqld/mysqld.sock
 
+# Le port sur lequel MariaDB écoute
+port    = 3306
 
-
-
+# IMPORTANT : bind-address = 0.0.0.0 signifie "écouter sur TOUTES les interfaces réseau"
+# Par défaut c'est 127.0.0.1 (localhost uniquement), mais dans Docker,
+# WordPress est dans un AUTRE conteneur, donc il doit pouvoir se connecter via le réseau
+bind-address = 0.0.0.0

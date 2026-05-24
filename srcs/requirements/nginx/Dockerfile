@@ -1,18 +1,34 @@
-FROM	debian:bullseye
+# 1. Même base Alpine
+FROM alpine:3.18
 
-RUN		apt update -y && \
-		apt upgrade -y && \
-		apt install -y openssl nginx vim curl && \
-		mkdir -p /etc/nginx/ssl && \
-		openssl req -x509 -nodes -days 365 \
-		-newkey rsa:2048 \
-		-keyout /etc/nginx/ssl/inception.key \
-		-out /etc/nginx/ssl/inception.crt \
-		-subj "/C=FR/ST=Occitanie/L=Perpignan/O=42/OU=42/CN=hduflos.42.fr" && \
-		mkdir -p /var/run/nginx && \
-		chmod -R 755 /var/www/html
+# 2. On installe :
+#    - nginx : le serveur web / reverse proxy
+#    - openssl : pour générer le certificat SSL (HTTPS)
+RUN apk update && apk add --no-cache \
+    nginx \
+    openssl
 
-COPY	conf/nginx.conf /etc/nginx/nginx.conf
+# 3. On crée le dossier pour les certificats SSL
+RUN mkdir -p /etc/nginx/ssl
 
-CMD		[ "nginx", "-g", "daemon off;" ]
+# 4. On génère un certificat SSL auto-signé
+#    -x509 : type de certificat
+#    -days 365 : valide 1 an
+#    -newkey rsa:2048 : clé de 2048 bits
+#    -nodes : pas de mot de passe sur la clé
+#    -subj : les infos du certificat (pays, ville, nom...)
+RUN openssl req -x509 -days 365 -newkey rsa:2048 -nodes \
+    -keyout /etc/nginx/ssl/server.key \
+    -out /etc/nginx/ssl/server.crt \
+    -subj "/C=FR/ST=Paris/L=Paris/O=42/CN=spike.42.fr"
 
+# 5. On copie la config NGINX
+COPY conf/nginx.conf /etc/nginx/http.d/default.conf
+
+# 6. On expose le port 443 (HTTPS)
+#    Pas le port 80 (HTTP) car le sujet demande HTTPS uniquement
+EXPOSE 443
+
+# 7. Lance NGINX au premier plan
+#    "daemon off" = ne pas se lancer en arrière-plan (Docker a besoin du processus au premier plan)
+CMD ["nginx", "-g", "daemon off;"]
